@@ -1,3 +1,0 @@
-text=Pixelmatix
-top=19
-font=font8x13

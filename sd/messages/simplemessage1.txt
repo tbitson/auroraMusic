@@ -1,1 +1,0 @@
-text=Simple Message 1

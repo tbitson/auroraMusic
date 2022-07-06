@@ -1,2 +1,0 @@
-text=Hello World!
-font=gohufont11b
