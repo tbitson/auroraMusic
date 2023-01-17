@@ -141,10 +141,10 @@ void updateDMX()
     // select pattern
   {
     // increment pattern for every 10 dmx counts
-    dmxValues[1] /= 10;
-    if (dmxValues[1] < numPatterns)
+    uint8_t p = dmxValues[1] / 10;
+    if (p < numPatterns)
     {
-      pattern = dmxValues[1];
+      pattern = p;
       printValue("pattern set", pattern);
     }
   }

@@ -35,43 +35,25 @@
                deleted some patterns that don't work, are redundant, or are just plain shitty
                removed all RTC code, added star color & pattern mode to eeprom
   vers 3.8.0   release candidate - fixed rotation bugs, cleanup
-  vers 3.9.x   release for BHB as 4.0
+  vers 3.9.x   cleanup for release
+  vers 4.0.0.  release version, split off BHB version 31Jul2022
+  vers 4.0.3   added pattern autoincrement mode, increments pattern every 60 seconds. 
+               Removed all rotate options
+
 
 
   To Do:
       FIX use on bigLedFrame - out of memoery error due to addition of life pattern
       Add use of ext mem on Teensy 4.1
-      Add GIF Player (pending switch to Teensy 4.1)
-      Add new Default BHB Image
-
-   lil music frame has ext mem:
-   EXTMEM Memory Test, 8 Mbyte
-   CCM_CBCMR=B5AE8304 (88.0 MHz)
-
-
-  ports:
-  lil music frame: 301 Teensy 411 - has 8mb extmem
-  big music frame: 701 Teensy 4.1
-  Stereo Cabinet : 901 Teensy 4.0 32x64
+      Update to new IRremote & FastLED 3.4
 
 
 
-***********************************************************************/
+**********************************************************************/
 
 
-#define VERSION "Aurora v394 30Jun2022"
+#define VERSION "Aurora v403 17Jan2023"
 
-
-
-// ------>  define the target display <-------
-
-//#define BHB_DISPLAY1
-//#define BHB_DISPLAY2
-#define BIG_MUSIC_FRAME
-//#define LIL_MUSIC_FRAME
-//#define PANELS_32x64
-
-//--------------------------------------------
 
 
 // helpers
@@ -84,28 +66,53 @@
 // hardware.h must be included first, sets display specific settings
 #include "hardware.h"
 
-// global options in the following block
+
+
+// ---- eeprom config ----------------
+
+#define EEPROM_START_ADDR   0x00
+#define EEPROM_VERS         41
+#define EEPROM_CHECK_VALUE  0xA5
+
+
+struct EEPromData {
+  uint8_t vers;
+  uint8_t pattern;
+  uint8_t starPattern;
+  uint8_t starColor;
+  uint8_t persistance;
+  uint8_t checkValue;
+  uint16_t dmxAddress;
+  uint32_t delayVal;
+};
+
+
+
+
+// global options
 // see hardware.h for device specific options
 // values marked with * are stored in EEPROM and re-loaded at startup
-String deviceName  = DISPLAY_NAME;  // device name from hardware.h
-uint8_t printLevel = 1;             // debug print level
-bool simAudio      = DISABLED;      // enables simulated audio for testing
-bool showFPS       = DISABLED;      // show update rate
-bool testMode      = DISABLED;      // toggle raw audio in analyzer8 to check levels
-bool dmxDebug      = DISABLED;      // enable dmx data prints
-uint8_t dmxAddress = 0;             // * dmx channel
-uint8_t pattern    = 1;             // * set default pattern
-uint32_t delayVal  = DELAY_VAL;     // * overall display update rate
-uint8_t persistance = 176;          // * how much to dim pixels stars
+bool simAudio       = DISABLED;      // enables simulated audio for testing
+bool showFPS        = DISABLED;      // show update rate
+bool testMode       = DISABLED;      // toggle raw audio in analyzer8 to check levels
+bool dmxDebug       = DISABLED;      // enable dmx data prints
+bool autoincrement  = false;         // auto-increment the pattern
+String deviceName   = DISPLAY_NAME;  // device name from hardware.h
+uint8_t printLevel  = 1;             // debug print leveluint8_t 
+uint8_t pattern     = 1;             // * set starting pattern
+uint8_t persistance = 176;           // * how much to dim pixels stars
+uint16_t dmxAddress = DMX_ADDRESS;   // * dmx address
+uint32_t delayVal   = DELAY_VAL;     // * overall display update rate
 
 
 // global vars
-bool eepromUpdate = false;          // flag to indicate eeprom data needs to be saved
-uint8_t brightness = 255;           // display brightness
-uint32_t ticks = 0;                 // just counts display updates
+bool eepromUpdate   = false;         // flag to indicate eeprom data needs to be saved
+uint8_t brightness  = 255;           // display brightness
+uint32_t ticks      = 0;             // just counts display updates
+uint32_t lastSwitch = 0;             // time of last auto pattern switch
 
 
-// global sceen size vars, will not be valid until after rotation is applied
+// global screen size vars, will not be valid until after rotation is applied
 uint16_t kScreenWidth;
 uint16_t kScreenHeight;
 uint16_t kMatrixCenterX;
@@ -113,12 +120,11 @@ uint16_t kMatrixCenterY;
 
 
 // local includes
+#include <FastLED.h>
 #include <MatrixHardware_Teensy4_ShieldV5.h>
 #include <SmartMatrix4.h>
-#include <FastLED.h>
 #include <EEPROM.h>
 #include <PrintValues.h>
-
 
 
 // prototypes for this file
@@ -126,37 +132,35 @@ void setup();
 void loop();
 void saveSettings();
 void restoreSettings();
+void clearEEPROM();
 void showSettings();
-
-
-
-
-
-// configure smartmatrix driver & allocate buffers, from hardware.h
-#define COLOR_DEPTH 24
-const uint16_t kMatrixWidth  = X_PANEL_SIZE * NUM_X_PANELS;
-const uint16_t kMatrixHeight = Y_PANEL_SIZE * NUM_Y_PANELS;
-const uint8_t kRefreshDepth = 24;
-const uint8_t kDmaBufferRows = 4;
-const uint8_t kPanelType = PANEL_TYPE;
-const uint8_t kMatrixOptions = PANEL_OPTIONS;
-const uint8_t kBackgroundLayerOptions = (SM_BACKGROUND_OPTIONS_NONE);
-
-SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
-SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
-
-
-// rotation other than 0 is unpredictable at this time
-rotationDegrees rotation = ROTATION;
-
-// total leds for array allocations, rotation shouldn't affect this
-const uint16_t kNumLEDs = kMatrixWidth * kMatrixHeight;
-
 
 // nonvolatile eeprom struct for saving settings
 EEPromData eepromData;
 
 
+
+
+
+// configure smartmatrix panel settings & allocate buffers, from hardware.h
+// these comstants are idendified by 'k'
+#define COLOR_DEPTH 24
+const uint16_t kMatrixWidth  = X_PANEL_SIZE * NUM_X_PANELS;
+const uint16_t kMatrixHeight = Y_PANEL_SIZE * NUM_Y_PANELS;
+const uint8_t  kRefreshDepth = 24;
+const uint8_t  kDmaBufferRows = 4;
+const uint8_t  kPanelType = PANEL_TYPE;
+const uint8_t  kMatrixOptions = PANEL_OPTIONS;
+const uint8_t  kBackgroundLayerOptions = (SM_BACKGROUND_OPTIONS_NONE);
+
+SMARTMATRIX_ALLOCATE_BUFFERS(matrix, kMatrixWidth, kMatrixHeight, kRefreshDepth, kDmaBufferRows, kPanelType, kMatrixOptions);
+SMARTMATRIX_ALLOCATE_BACKGROUND_LAYER(backgroundLayer, kMatrixWidth, kMatrixHeight, COLOR_DEPTH, kBackgroundLayerOptions);
+
+// total leds for array allocations, rotation shouldn't affect this
+const uint32_t kNumLEDs = kMatrixWidth * kMatrixHeight;
+
+
+// include modules
 #include "readAudio.h"
 #include "audioPatterns.h"
 AudioPatterns audioPatterns;
@@ -183,6 +187,8 @@ void setup()
   Serial.begin(57600);
   delay(3000);
 
+  Serial.println(VERSION);
+
   // init eeprom library
   EEPROM.begin();
   delay(100);
@@ -190,21 +196,16 @@ void setup()
   // get saved parameters
   restoreSettings();
 
-  // if flag is set, set default pattern on power-up
-#ifdef SET_STARTUP_PATTERN
-  pattern = DEFAULT_PATTERN;
-#endif
-
+  //  pattern = defaultPattern;
   lastPattern = pattern;
 
   // start up matrix driver
   matrix.addLayer(&backgroundLayer);
   matrix.begin();
 
-  matrix.setRotation(rotation);
+  matrix.setRotation(rotation0);
   matrix.setBrightness(brightness);
   backgroundLayer.enableColorCorrection(true);
-
 
   // update global matrix size constants after rotation call
   kScreenWidth = matrix.getScreenWidth() - 1;
@@ -220,8 +221,6 @@ void setup()
 
   // init patterns
   audioPatterns.init();
-
-  Serial.println(VERSION);
 
   // setup effects functions
   effects.setup();
@@ -257,13 +256,13 @@ void setup()
 
 void loop()
 {
-#ifdef USE_SERIAL
   // check serial port for data & handle
+#ifdef USE_SERIAL
   checkSerial();
 #endif
 
-#ifdef USE_DMX
   // check for dmx change
+#ifdef USE_DMX
   checkDMX();
 #endif
 
@@ -273,11 +272,10 @@ void loop()
   // print the frames per second for debug
   if (showFPS) matrix.countFPS();
 
-#ifdef USE_IR_REMOTE
   // check for pending ir commands
+#ifdef USE_IR_REMOTE
   checkIRRemote();
 #endif
-
 
   // slow things down a bit
   delay(delayVal);
@@ -313,21 +311,6 @@ void saveSettings()
 
 
 
-
-// clear eeprom contents (dev use only so far)
-void clearEEPROM()
-{
-  Serial.println("Clearing EEPROM...");
-  printValue("EEPROM size = ", EEPROM.length());
-
-  for (int i = 0 ; i < EEPROM.length() ; i++)
-    EEPROM.write(i, 0xFF);
-
-  Serial.println("done");
-}
-
-
-
 void restoreSettings()
 {
   EEPROM.get(EEPROM_START_ADDR, eepromData);
@@ -359,6 +342,19 @@ void restoreSettings()
 
 
 
+// clear eeprom contents (dev use only so far)
+void clearEEPROM()
+{
+  Serial.println("Clearing EEPROM...");
+  printValue("EEPROM size = ", EEPROM.length());
+
+  for (int i = 0 ; i < EEPROM.length() ; i++)
+    EEPROM.write(i, 0xFF);
+
+  Serial.println("done");
+}
+
+
 
 
 void showSettings()
@@ -371,7 +367,6 @@ void showSettings()
   Serial.print("platform     : "); Serial.println(PLATFORM);
   Serial.print("matrix width : "); Serial.println(kMatrixWidth);
   Serial.print("matrix height: "); Serial.println(kMatrixHeight);
-  Serial.print("rotation     : "); Serial.println(rotation);
   Serial.print("screen width : "); Serial.println(kScreenWidth);
   Serial.print("screen hieght: "); Serial.println(kScreenHeight);
   Serial.print("center X     : "); Serial.println(kMatrixCenterX);
@@ -392,24 +387,21 @@ void showSettings()
   Serial.println("Serial       : Disabled");
 #endif
 
-
 #ifdef USE_DMX
-  Serial.println("DMX         : Enabled");
+  Serial.println("DMX          : Enabled");
   Serial.print("Num DMX Addr: ");
   Serial.println(DMX_SIZE);
   Serial.print("DMX Address : ");
   Serial.println(DMX_ADDRESS);
 #else
-  Serial.println("DMX         : Disabled");
+  Serial.println("DMX          : Disabled");
 #endif
-
 
 #ifdef USE_IR_REMOTE
-  Serial.println("IR Remote   : Enabled");
+  Serial.println("IR Remote    : Enabled");
 #else
-  Serial.println("IR Remote   : Disabled");
+  Serial.println("IR Remote    : Disabled");
 #endif
-
 
 #ifdef BOUNDS_CHECKING
   Serial.println("bounds check: Enabled");

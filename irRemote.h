@@ -17,14 +17,12 @@
 **************************************************/
 
 
-
+#ifdef USE_IR_REMOTE
 
 #pragma once
 
-
 #include <IRremote.h>
 
-//#define IR_PRINT
 
 
 // prototypes
@@ -172,3 +170,5 @@ void processCode(uint32_t code)
       break;
   }
 }
+
+#endif

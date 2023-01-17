@@ -69,9 +69,11 @@ Life life;
 // needs to be after audioPatterns.h
 // and after rotation is updated
 
-
-Boid boids[160 + 16];
+uint16_t const numBoids = kMatrixWidth + 16;
+Boid boids[numBoids];
 //----------------------------------
+
+
 
 
 // funky way to select pattern, but makes it
@@ -149,8 +151,8 @@ String patternName[numPatterns] = {
 class AudioPatterns {
 
   private:
-    float beta = 0;                 // angle used in several patterns
-    float avg = 0;                  // used in radialCircles
+    float  beta = 0;                // angle used in several patterns
+    float  avg = 0;                 // used in radialCircles
     uint8_t hueOffset = 0;          // color shift var
     uint16_t lastX = 0;             // general purpose var
     uint16_t lastY = 0;             // general purpose var
@@ -161,7 +163,7 @@ class AudioPatterns {
     uint16_t X_PIXELS_PER_BAND7;
     uint16_t X_PIXELS_PER_BAND16;
 
-    // spiro
+    // spiro pattern
     uint8_t theta1 = 0;              // angle used in several patterns
     uint8_t theta2 = 0;              // angle used in several patterns
     uint8_t rotate = 0;              // used in radialCircles()
@@ -173,11 +175,11 @@ class AudioPatterns {
     boolean spiroIncrement = false;
     boolean handledChange = false;
 
-    // boids
+    // boids pattern
     PVector gravity;                // boid vars
     PVector impulse;                // boid vars
 
-    // radial circles
+    // radial circles pattern
     uint8_t lastColorIndex = 0;     // last color used in radial circles
 
     void Life();
@@ -195,6 +197,11 @@ class AudioPatterns {
       gravity = PVector(0, 0.0250);
       impulse = PVector(0, 0);
 
+      Serial.print("Pattern: ");
+      Serial.print(pattern);
+      Serial.print(" = ");
+      Serial.println(patternName[pattern]);
+
       X_PIXELS_PER_BAND7 = matrix.getScreenWidth() / EQ_BANDS7;
       X_PIXELS_PER_BAND16 = matrix.getScreenWidth() / EQ_BANDS16;
       Y_AUDIO_SF = (MAX_AUDIO + 1) / (matrix.getScreenHeight() + 1);
@@ -207,7 +214,7 @@ class AudioPatterns {
       readAudio();
 
       // dim display if no audio
-      if (gain > maxGain - 1)
+      if (gain == maxGain)
       {
         sleepCount++;
 
@@ -221,13 +228,29 @@ class AudioPatterns {
           brightness += 1;
       }
 
+
+      // periodically check if its time to increment pattern
+      // but don't switch while sleeping
+      if (autoincrement && brightness > 64)
+      {
+        if (millis() - lastSwitch > AUTO_SWITCH_DURATION)
+        {
+          pattern++;
+          if (pattern > numPatterns - 1)
+            pattern = 1;
+          lastSwitch = millis();
+
+          Serial.print("Pattern = ");
+          Serial.print(pattern);
+          Serial.print(" = ");
+          Serial.println(patternName[pattern]);
+        }
+      }
+
       // did we change patterns?
       if (pattern != lastPattern)
       {
-        // show name & set eepromUpdate flag
-        if (printLevel > 0)
-          showPatternName();
-
+        // set eepromUpdate flag
         eepromUpdate = true;
 
         // re-initialize pattern vars
@@ -280,7 +303,7 @@ class AudioPatterns {
       // special cases for now, updated in pattern
       if (pattern == STARBURST)
         return;
-        
+
 #ifdef INCLUDE_LIFE
       if (pattern == LIFE)
         return;
@@ -295,14 +318,6 @@ class AudioPatterns {
       // get updated screen buffer
       rgb24Buffer = backgroundLayer.backBuffer();
     }
-
-
-
-    void showPatternName()
-    {
-      Serial.print("pattern : ");  Serial.println(patternName[pattern]);
-    }
-
 
 
     void off()
@@ -339,7 +354,7 @@ class AudioPatterns {
           color = rgb24SetColorBrightness(color, (uint8_t )intensity);
         }
       }
-      
+
       sleepCount = 0;
       brightness = 250;
     }
@@ -526,11 +541,11 @@ class AudioPatterns {
       {
         initialized = true;
 
-        int direction = random(0, 2);
+        int direction = random(0, 2); // -1, 1
         if (direction == 0)
           direction = -1;
 
-        for (uint16_t i = 0; i < kScreenWidth; i++)
+        for (uint16_t i = 0; i < numBoids; i++)
         {
           Boid boid = Boid(i, height);
           boid.velocity.x = 0;
@@ -572,7 +587,7 @@ class AudioPatterns {
       }
 
       // pattern speed delay
-      delay(10);
+      delay(5);
     }
 
 

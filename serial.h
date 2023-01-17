@@ -10,6 +10,7 @@
 
 
 
+
 #ifdef USE_SERIAL
 
 
@@ -52,9 +53,17 @@ void checkSerial()
       pattern++;
       if (pattern > numPatterns)
         pattern = 0;
-      printValue("pattern", pattern);
+      //printValue("pattern", pattern);
       eepromUpdate = true;
       break;
+
+    case 'i':
+      autoincrement = !autoincrement;
+      Serial.print("autoincrement ");
+      autoincrement ? Serial.println("Enabled") : Serial.println("Disabled");
+      lastSwitch = millis();
+      break;
+      
 
     case '-':
       if (pattern > 0)
@@ -152,7 +161,7 @@ void checkSerial()
       Serial.println("p)  starBurst: cycle Pattern");
       Serial.println("u)  toggle print Update rate");
       Serial.println("t)  toggle audio testMode (raw audio values)");
-      Serial.println("T)  toggle audio degug values");
+      Serial.println("T)  toggle audio debug values");
       Serial.println("W)  display all White test pattern (use caution!)");
       Serial.println("x)  toggle DMX debug mode");
       Serial.println("d)  inc debug print level");

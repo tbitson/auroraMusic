@@ -51,7 +51,7 @@ void printAudioValues();
 // adjust these to your preference
 
 const bool useLogScale       = false;
-const float maxGain          = 12.0;
+const float maxGain          = 16.0;
 const float minGain          = 0.1;
 const uint16_t lowThreshold  = 450;
 const uint16_t highThreshold = 630;
@@ -105,23 +105,13 @@ bool audioDebug = false;
 
 void initAudio()
 {
-  // power up the chip if using i/o pins for power
-#ifdef MSGEQ7_VCC_PIN
-  pinMode(MSGEQ7_GND_PIN, OUTPUT);
-  digitalWrite(MSGEQ7_GND_PIN, LOW);
-  delay(1);
-  pinMode(MSGEQ7_VCC_PIN, OUTPUT);
-  digitalWrite(MSGEQ7_VCC_PIN, HIGH);
-  delay(500);
-#endif
-
-
   // setup & init the MSGEQ7
   pinMode(MSGEQ7_RESET_PIN, OUTPUT);
   pinMode(MSGEQ7_STROBE_PIN, OUTPUT);
   
   digitalWrite(MSGEQ7_RESET_PIN, LOW);
   digitalWrite(MSGEQ7_STROBE_PIN, HIGH);
+  delay(500);
 
   // starting gain
   if (useLogScale)
@@ -162,9 +152,9 @@ void getAudioData()
 
   // reset MSEG07 for data read, 100ns min
   digitalWrite(MSGEQ7_RESET_PIN, HIGH);
-  delayMicroseconds(25);
+  delayMicroseconds(20);
   digitalWrite(MSGEQ7_RESET_PIN, LOW);
-  delayMicroseconds(19);
+  delayMicroseconds(10);
 
   maxLevel = 0;
   maxRaw   = 0;
@@ -174,7 +164,7 @@ void getAudioData()
   for (uint8_t band = 0; band < EQ_BANDS7; band++)
   {
     digitalWrite(MSGEQ7_STROBE_PIN, LOW);
-    delayMicroseconds(25);
+    delayMicroseconds(15);
 
     // read audio band votage
     value = (float)analogRead(MSGEQ7_AUDIO_PIN);
@@ -207,7 +197,7 @@ void getAudioData()
     }
 
     // remove background noise
-    value -= (float)background[band];
+    value -= background[band];
 
     // check if below minimum threshold (removes negative values)
     if (value < minThreashold)
@@ -246,7 +236,7 @@ void getAudioData()
       printAudioValues();
 
 
-    // toggle msgeg7 to next band
+    // toggle msgeq7 to next band
     digitalWrite(MSGEQ7_STROBE_PIN, HIGH);
     delayMicroseconds(10);
   }
@@ -268,13 +258,13 @@ void adjustGain()
 
 void calcAvg()
 {
-  // first, avg all 7 bands
+  // first, std avg all 7 bands
   float sum = 0;
   for (uint8_t band = 0; band < EQ_BANDS7; band++)
     sum += audio[band];
-
   float newAvg = sum / (float)EQ_BANDS7;
-  // then calc running average
+  
+  // then calc running average for level and and eq band
   avgLevel = avgLevel * avgFactor + (1.0 - avgFactor) * newAvg;
   //printValue("avgLevel", avgLevel);
 
@@ -288,12 +278,12 @@ void findPeaks()
   float value;
   pkLevel = 0;
 
-  //  check for new peak for each hw band
+  //  check for peak for each hw band
   for (uint8_t band = 0; band < EQ_BANDS7; band++)
   {
     value = audio[band];
 
-    // finf peak of all bands
+    // find peak of all bands
     if (value > pkLevel)
     {
       pkLevel = value;
