@@ -1,9 +1,10 @@
 AuroraMusic - LED Matrix Music Display
+
 Displays visual audio patterns on common LED matrix panels that
 support the HUB75/HUB75E interface. Supports up to 192x192 pixel
 displays (maybe higher...)
 
-Inspiration came from the original Aurora Display from Louis Beaudoin/ and
+Inspiration came from the original Aurora Display from Louis Beaudoin and
 Jason Coon @ Pixelmatix. Simply awesome! I prefered the audio patterns, so I
 stripped out the non-audio stuff to make room for more audio patterns. And
 then Paul @ PRJC created Teensy 3.x & 4.x with more memory and CPU power...
@@ -42,13 +43,13 @@ DMX support was added so the Brad Harris Band could use these on stage.
                added #define in hardware.h for rotation value
                moved kScreenWidth & kScreenHeight assignments after rotation call
                started fixing rotated patterns on non-square displays
-               deleted some patterns that don't work, are redundant, or are just plain shitty
-               removed all RTC code, added star color & pattern mode to eeprom
+               deleted some patterns that don't work, are redundant, or are just 
+               plain shitty. removed all RTC code, added star color & pattern mode to eeprom
   vers 3.8.0   release candidate - fixed rotation bugs, cleanup
   vers 3.9.x   cleanup for release
   vers 4.0.0.  release version, split off BHB version 31Jul2022
   vers 4.0.3   added pattern autoincrement mode, increments pattern every 60 seconds. 
-               Removed all rotate options
+               Removed all rotate options since it madesome patterns wonky.
 
 
 
